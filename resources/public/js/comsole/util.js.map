@@ -1,0 +1,9 @@
+{"version":3,
+ "file":"/home/tom/code/comsole/resources/public/js/comsole/util.js",
+ "sources":["util.cljs"],
+ "lineCount":13,
+ "mappings":
+ ";AAAA;;;;;;;;AAKA,wBAAA,0BAAA,AAAA,0FAAA,gDAAA,2CAAA,vOAAMA,2CAAUC,iPACH,AAACC,6BAAcC,sBAAcF,eACvC,AAACG,2BAASH",
+ "names":
+ ["comsole.util/link-for", "route", "bidi.bidi/path-for",
+  "comsole.routes/routes", "comsole.lang/std"]}

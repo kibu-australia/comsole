@@ -1,0 +1,9 @@
+{"version":3,
+ "file":"/home/tom/code/comsole/resources/public/js/comsole/lang.js",
+ "sources":["lang.cljs"],
+ "lineCount":9,
+ "mappings":
+ ";AAAA;;AAEA,oBAAA,pBAAeA;AAEf,oBAAA,2CAAA,+CAAA,2CAAA,gEAAA,2CAAA,4DAAA,kBAAA,2DAAA,2CAAA,4DAAA,wBAAA,8DAAA,2CAAA,4DAAA,iBAAA,iEAAA,2CAAA,4DAAA,12BAAKC;AAML,mBAAA,iBAAA,pCAAMC,iCAAKC,GACT,oDAAA,uGAAA,pJAACC,2BAAOH,qGAAMD,kBAAKG",
+ "names":
+ ["comsole.lang/lang", "comsole.lang/dict", "comsole.lang/std", "x",
+  "cljs.core/get-in"]}
