@@ -1,0 +1,9 @@
+{:comsole/all
+ {:txes
+  [[{:db/id #db/id [:db.part/db]
+      :db/ident :demo/message
+      :db/doc "A pointless message"
+      :db/index true
+      :db/valueType :db.type/string
+      :db/cardinality :db.cardinality/one
+      :db.install/_attribute :db.part/db}]]}}
