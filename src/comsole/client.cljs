@@ -15,106 +15,131 @@
 (enable-console-print!)
 (def event-bus (chan))
 
-(def state (atom {:queries []
-                  :query {:find ['?type '(count ?ident) '?doc] 
-                          :where [{:entity '?x :attr :db/valueType :value '?t}
-                                  {:entity '?x :attr :db/ident :value '?ident}
-                                  {:entity '?t :attr :db/ident :value '?type}
-                                  {:entity '?t :attr :db/doc :value '?doc}]}
-                  :data [] 
-                  :nav {}
-                  :docs {}
-                  :loading? false
-                  :time-machine? false
-                  :page :app/docs}))
+(defonce state
+  (atom {:queries []
+         :query {:find ['?type '(count ?ident) '?doc]
+                 :where [{:entity '?x :attr :db/valueType :value '?t}
+                         {:entity '?x :attr :db/ident :value '?ident}
+                         {:entity '?t :attr :db/ident :value '?type}
+                         {:entity '?t :attr :db/doc :value '?doc}]}
+         :data []
+         :nav {}
+         :docs {}
+         :loading? false
+         :time-machine? false
+         :page :app/docs}))
 
 (defn dispatch [match]
   (put! event-bus [:route match]))
 
 (pushy/push-state! dispatch
                    (partial bidi/match-route routes/routes)
-
                    identity)
 
-(defmulti controller first)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Event controller
+
+(defmulti controller
+  (fn [[event & opts] state] event))
 
 ;; Act on route changes
 (defmethod controller :route
-  [[_ match]]
-  (swap! state assoc :page (:handler match)))
+  [[_ match] state]
+  (assoc state :page (:handler match)))
 
 ;; Make a query
-(defmethod controller :query/run
-  [_]
-  (go
-    (swap! state assoc :loading? true)
-    (print "Here")
-    (let [query {:find (vec (get-in @state [:query :find]))
-                 :where (mapv (fn [row] [(:entity row)
-                                         (:attr row)
-                                         (:value row)])
-                              (get-in @state [:query :where]))}
-          res (:body (<! (http/post "http://localhost:3000/query" 
-                                    {:headers {"accept" "application/edn"}
-                                     :edn-params {:query query}})))]
-      (print query)
-      (println "Done")
-      (swap! state assoc :data res)
-      (swap! state assoc :loading? false)
-      (print @state))))
-
+(defmethod controller :query/ran
+  [[_ data] state]
+  (assoc state :data data))
 
 ;; Fetch the docs
-(defmethod controller :docs/fetch
-  [_]
-  (go
-    (swap! state assoc
-           :docs
-           (:body (<! (http/get "http://localhost:3000/idents"
-                                {:headers {"accept" "application/edn"}}))))))
-
+(defmethod controller :docs/fetched
+  [[_ data] state]
+  (assoc state :docs data))
 
 (defmethod controller :builder/add-row
-  [_]
-  (go
-    (swap! state update-in [:query :where] conj {:entity nil :attr nil :value nil})))
+  [_ state]
+  (update-in state [:query :where] conj {:entity nil :attr nil :value nil}))
 
 (defmethod controller :builder/del-row
-  [[_ row]]
-  (swap! state update-in [:query :where] (fn [x] (remove (fn [[i m]] (= row i))
-                                                         (map-indexed vector (get-in @state [:query :where]))))))
+  [[_ row] state]
+  (update-in state [:query :where]
+             (fn [x] (remove (fn [[i m]] (= row i))
+                            (map-indexed vector (get-in state [:query :where]))))))
 
 (defmethod controller :builder/edit-cell
-  [[_ i j v]]
-  (swap! state assoc-in [:query :where i j]
-         (if (nil? v) nil (cljs.reader/read-string v))))
+  [[_ i j v] state]
+  (assoc-in state [:query :where i j]
+            (if (nil? v) nil (cljs.reader/read-string v))))
 
 (defmethod controller :builder/find-add
-  [[_ find]]
-  (swap! state update-in [:query :find] conj 
-         (cljs.reader.read-string find)))
+  [[_ find] state]
+  (update-in state [:query :find] conj
+             (cljs.reader.read-string find)))
 
 (defmethod controller :builder/find-remove
-  [[_ find]]
-  (swap! state update-in [:query :find] (fn [x] (reduce (fn [c w] (if (not= w find)
-                                                                    (conj c w)
-                                                                    c))
-                                                        []
-                                                        x))))
+  [[_ find] state]
+  (update-in state [:query :find]
+             (fn [x] (reduce (fn [c w] (if (not= w find)
+                                       (conj c w)
+                                       c))
+                            []
+                            x))))
 
 ;; Expand/collapse the doc menu items
 (defmethod controller :nav/toggle
-  [[_ nav]]
-  (swap! state update-in [:nav nav] not))
+  [[_ nav] state]
+  (update-in state [:nav nav] not))
+
+(defmethod controller :default
+  [[event & _] state]
+  (.log js/console (pr-str "No method found for event " event))
+  state)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Post controller: for side effects etc
+
+(defmulti post-controller!
+  (fn [[event & args] previous-state current-state] event))
+
+(defmethod post-controller! :default [_ _ _] nil)
+
+(defmethod post-controller! :docs/fetch [_ _ _]
+  (go
+    (let [docs (<! (http/get "http://localhost:3000/idents"
+                             {:headers {"accept" "application/edn"}}))]
+      (>! event-bus [:docs/fetched (:body docs)]))))
+
+(defmethod post-controller! :query/run [_ _ current-state]
+  (go
+    (let [query {:find (vec (get-in current-state [:query :find]))
+                 :where (mapv (fn [row] [(:entity row)
+                                        (:attr row)
+                                        (:value row)])
+                              (get-in current-state [:query :where]))}
+          res (:body (<! (http/post "http://localhost:3000/query"
+                                    {:headers {"accept" "application/edn"}
+                                     :edn-params {:query query}})))]
+      (>! event-bus [:query/ran res]))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Main event loop
 
 (go-loop []
-  (let [event (<! event-bus)]
-    (println (pr-str event))
-    (controller event)
+  (let [event (<! event-bus)
+        previous-state @state]
+    (.log js/console (pr-str "Event for " (first event)))
+    (swap! state assoc :loading? true)
+    (swap! state (partial controller event))
+    (post-controller! event previous-state @state)
+    (swap! state assoc :loading? false)
     (recur)))
 
-(om/root views/widget 
-         state 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Root OM component
+
+(om/root views/widget
+         state
          {:target (.getElementById js/document "app")
           :shared {:control event-bus}})
 
