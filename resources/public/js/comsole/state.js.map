@@ -1,6 +1,0 @@
-{"version":3,
- "file":"/home/tom/code/comsole/resources/public/js/comsole/state.js",
- "sources":["state.cljs"],
- "lineCount":6,
- "mappings":";AAAA;;AAEA,AAAKA,sBAAM,yBAAA,2CAAA,2DAAA,/HAACC",
- "names":["comsole.state/state", "cljs.core/atom"]}

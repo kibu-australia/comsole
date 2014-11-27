@@ -1,8 +1,0 @@
-{"version":3,
- "file":
- "/home/tom/code/comsole/resources/public/js/comsole/routes.js",
- "sources":["routes.cljs"],
- "lineCount":6,
- "mappings":
- ";AAAA;;AAEA,wBAAA,mFAAA,IAAA,2CAAA,GAAA,yDAAA,OAAA,2DAAA,SAAA,8DAAA,UAAA,gEAAA,UAAA,nbAAKA",
- "names":["comsole.routes/routes"]}
