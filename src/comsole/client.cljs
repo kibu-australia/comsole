@@ -48,14 +48,22 @@
   (assoc state :page (:handler match)))
 
 ;; Make a query
+(defmethod controller :query/run
+  [_ state]
+  (assoc state :loading? true))
+
 (defmethod controller :query/ran
   [[_ data] state]
-  (assoc state :data data))
+  (assoc state :data data :loading? false))
 
 ;; Fetch the docs
+(defmethod controller :docs/fetch
+  [_ state]
+  (assoc state :loading? true))
+
 (defmethod controller :docs/fetched
   [[_ data] state]
-  (assoc state :docs data))
+  (assoc state :docs data :loading? false))
 
 (defmethod controller :builder/add-row
   [_ state]
@@ -129,10 +137,8 @@
   (let [event (<! event-bus)
         previous-state @state]
     (.log js/console (pr-str "Event for " (first event)))
-    (swap! state assoc :loading? true)
     (swap! state (partial controller event))
     (post-controller! event previous-state @state)
-    (swap! state assoc :loading? false)
     (recur)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
