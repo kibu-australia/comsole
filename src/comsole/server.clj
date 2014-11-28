@@ -59,7 +59,11 @@
       (component/system-using
        {:server {:conn :db}})))
 
-(defn -main []
+(defn start-system []
   (alter-var-root #'system component/start))
 
-(alter-var-root #'system component/start)
+(defn stop-system []
+  (alter-var-root #'system component/stop))
+
+(defn -main []
+  (start-system))
