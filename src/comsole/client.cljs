@@ -83,7 +83,7 @@
 (defmethod controller :builder/find-add
   [[_ find] state]
   (update-in state [:query :find] conj
-             (cljs.reader.read-string find)))
+             (cljs.reader/read-string find)))
 
 (defmethod controller :builder/find-remove
   [[_ find] state]

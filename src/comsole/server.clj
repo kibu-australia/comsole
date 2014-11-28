@@ -12,12 +12,6 @@
             [ring.middleware.edn :refer [wrap-edn-params]])
   (:gen-class))
 
-(def routes
-  ["/" {""         :app/home 
-        "/docs"    :app/docs
-        "/browse"  :app/browse
-        "/queries" :app/queries}])
-
 (defonce conn (atom nil))
 
 (defn init-conn []
@@ -64,7 +58,7 @@
                                 (if input
                                   (pr-str (apply q (concat [query (history (db @conn))] input)))
                                   (pr-str (apply q (concat [query (history (db @conn))])))))}))
-   
+
   (route/resources "/"))
 
 (def app
