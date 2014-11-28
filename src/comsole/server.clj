@@ -1,6 +1,7 @@
 (ns comsole.server
   (:require [ring.util.response :refer [file-response]]
-            [ring.middleware.defaults :refer :all]
+            [ring.middleware.resource :refer [wrap-resource]]
+            [ring.middleware.file-info :refer [wrap-file-info]]
             [datomic.api :as d :refer [db q history]]
             [comsole.routes :refer [routes]]
             [comsole.config :refer [read-config]]
@@ -46,8 +47,9 @@
 
 (defn handler [deps]
   (-> (make-handler routes (partial handler-lookup deps))
+      (wrap-resource "public")
+      (wrap-file-info)
       (wrap-edn-params)
-      (wrap-defaults site-defaults)
       (prone/wrap-exceptions)))
 
 (def system
@@ -59,3 +61,5 @@
 
 (defn -main []
   (alter-var-root #'system component/start))
+
+(alter-var-root #'system component/start)

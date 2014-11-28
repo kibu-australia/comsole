@@ -7,7 +7,6 @@
    [om-tools.core :refer-macros [defcomponentk]]
    [sablono.core :as html :refer-macros [html]]
    [cljs.core.async :as async :refer [chan <! put!]]
-   [ajax.core :as ajax]
    [cljs-http.client :as http]
    [comsole.views :as views]
    [comsole.routes :as routes]))
@@ -144,9 +143,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Root OM component
 
-(om/root views/widget
-         state
-         {:target (.getElementById js/document "app")
-          :shared {:control event-bus}})
+(defn main []
+  (om/root views/widget
+           state
+           {:target (.getElementById js/document "app")
+            :shared {:control event-bus}}))
+
+(main)
 
 (put! event-bus [:docs/fetch])
