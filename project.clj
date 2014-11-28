@@ -7,13 +7,13 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.7.0-alpha1"]
-                 [org.clojure/clojurescript "0.0-2322"]
+                 [org.clojure/clojurescript "0.0-2371"]
+                 [org.clojure/core.async "0.1.338.0-5c5012-alpha"]
+                 [com.stuartsierra/component "0.2.2"]
                  [ring "1.2.1"]
                  [ring-cors "0.1.0"]
                  [ring-middleware-format "0.4.0"]
-                 [compojure "1.1.6"]
                  [cljs-ajax "0.3.0"]
-                 [org.clojure/core.async "0.1.338.0-5c5012-alpha"]
                  [om "0.7.3"]
                  [sablono "0.2.22"]
                  [cljs-http "0.1.16"]
