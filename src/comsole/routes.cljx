@@ -1,9 +1,10 @@
 (ns comsole.routes)
 
 (def routes
-  ["/" {""        :app/home 
+  ["/" {""        :app/home
         "docs"    :app/docs
         "browse"  :app/browse
         "queries" :app/queries
-        "builder" :app/builder}])
-
+        "builder" :app/builder
+        "idents"  :api/idents
+        "query"   :api/query}])
