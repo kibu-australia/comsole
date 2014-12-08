@@ -7,7 +7,6 @@
    [om-tools.core :refer-macros [defcomponentk]]
    [sablono.core :as html :refer-macros [html]]
    [cljs.core.async :as async :refer [chan <! put!]]
-   [ajax.core :as ajax]
    [cljs-http.client :as http]
    [comsole.util :as u]))
 
@@ -16,7 +15,7 @@
 (defn bindings [query]
   (let [for-bindings   (filter symbol? (:find query))
         input-bindings (filter symbol? (:input query))
-        with-bindings  (filter symbol? 
+        with-bindings  (filter symbol?
                                (flatten (:where query)))]
     (distinct (concat for-bindings with-bindings))))
 
@@ -34,11 +33,11 @@
       [:div.sidebar-content
        [:ul.nav.nav-pills.nav-stacked
         (for [[nspace vs] (group-by (comp namespace first) docs)]
-          [:li [:a {:on-click #(put! control [:nav/toggle nspace])} 
+          [:li [:a {:on-click #(put! control [:nav/toggle nspace])}
                 [:span
                  (if (get-in nav [nspace])
                    [:span.glyphicon.glyphicon-chevron-down]
-                   [:span.glyphicon.glyphicon-chevron-right]) 
+                   [:span.glyphicon.glyphicon-chevron-right])
                  (str " " nspace "/")]]
            (when (get-in nav [nspace])
              [:ul.nav.nav-pills.nav-stacked.nested
@@ -102,7 +101,7 @@
        [:div.collapse.navbar-collapse
         [:span (str page)]
         [:ul.nav.navbar-nav
-         (for [route [:app/queries 
+         (for [route [:app/queries
                       :app/builder
                       :app/docs]]
            [:li {:class (when (= page route) "active")}
@@ -123,11 +122,11 @@
 
            [:input.form-control
             {:placeholder (str "Please enter a " j)
-             :on-key-down #(when (= 13 (.-which %)) 
+             :on-key-down #(when (= 13 (.-which %))
                              (put! control [:builder/edit-cell index j (-> % .-target .-value)])
                              (set! (-> % .-target .-value) ""))}])])
       [:td.control [:a.btn.btn-warning
-            {:on-click #(put! control [:builder/del-row index])} 
+            {:on-click #(put! control [:builder/del-row index])}
             [:span.glyphicon.glyphicon-remove]]]])))
 
 (defcomponentk builder [[:data data query docs loading? :as app] [:shared control]]
@@ -137,7 +136,7 @@
     (println "updated builder"))
   (render [_]
     (let [bindings  (bindings query)
-          bindings (map (fn [x] [(symbol x) "Binding"]) 
+          bindings (map (fn [x] [(symbol x) "Binding"])
                          bindings)
           drop-down bindings]
       (html
@@ -180,11 +179,11 @@
              (->where-row {:fields m :index i :drop-down drop-down :where m}))]]
          [:div.pull-right
           [:a.btn.btn-success
-           {:on-click #(put! control [:builder/add-row])} 
+           {:on-click #(put! control [:builder/add-row])}
            [:span.glyphicon.glyphicon-plus]]]]
-        [:a.btn.btn-primary {:on-click #(put! control [:query/run])} 
+        [:a.btn.btn-primary {:on-click #(put! control [:query/run])}
          "Test"]
-        [:a.btn.btn-primary {:on-click #()} 
+        [:a.btn.btn-primary {:on-click #()}
          "Save"]
         [:hr]
         (->results {:find (:find query) :data data :loading? loading?})]))))

@@ -7,7 +7,6 @@
    [om-tools.core :refer-macros [defcomponentk]]
    [sablono.core :as html :refer-macros [html]]
    [cljs.core.async :as async :refer [chan <! put!]]
-   [ajax.core :as ajax]
    [cljs-http.client :as http]
    [comsole.views :as views]
    [comsole.routes :as routes]))
@@ -36,6 +35,9 @@
                    (partial bidi/match-route routes/routes)
                    identity)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Event controller
+
 (defmulti controller
   (fn [[event & opts] state] event))
 
@@ -47,26 +49,20 @@
 ;; Make a query
 (defmethod controller :query/run
   [_ state]
-  (go
-    (let [query {:find (vec (get-in state [:query :find]))
-                 :where (mapv (fn [row] [(:entity row)
-                                         (:attr row)
-                                         (:value row)])
-                              (get-in state [:query :where]))}
-          res (:body (<! (http/post "http://localhost:3000/query"
-                                    {:headers {"accept" "application/edn"}
-                                     :edn-params {:query query}})))]
-      (assoc state :data res))))
+  (assoc state :loading? true))
+
+(defmethod controller :query/ran
+  [[_ data] state]
+  (assoc state :data data :loading? false))
 
 ;; Fetch the docs
 (defmethod controller :docs/fetch
   [_ state]
-  (go
-    (assoc state
-      :docs
-      (:body (<! (http/get "http://localhost:3000/idents"
-                           {:headers {"accept" "application/edn"}}))))))
+  (assoc state :loading? true))
 
+(defmethod controller :docs/fetched
+  [[_ data] state]
+  (assoc state :docs data :loading? false))
 
 (defmethod controller :builder/add-row
   [_ state]
@@ -86,7 +82,7 @@
 (defmethod controller :builder/find-add
   [[_ find] state]
   (update-in state [:query :find] conj
-             (cljs.reader.read-string find)))
+             (cljs.reader/read-string find)))
 
 (defmethod controller :builder/find-remove
   [[_ find] state]
@@ -102,17 +98,57 @@
   [[_ nav] state]
   (update-in state [:nav nav] not))
 
+(defmethod controller :default
+  [[event & _] state]
+  (.log js/console (pr-str "No method found for event " event))
+  state)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Post controller: for side effects etc
+
+(defmulti post-controller!
+  (fn [[event & args] previous-state current-state] event))
+
+(defmethod post-controller! :default [_ _ _] nil)
+
+(defmethod post-controller! :docs/fetch [_ _ _]
+  (go
+    (let [docs (<! (http/get "http://localhost:3000/idents"
+                             {:headers {"accept" "application/edn"}}))]
+      (>! event-bus [:docs/fetched (:body docs)]))))
+
+(defmethod post-controller! :query/run [_ _ current-state]
+  (go
+    (let [query {:find (vec (get-in current-state [:query :find]))
+                 :where (mapv (fn [row] [(:entity row)
+                                        (:attr row)
+                                        (:value row)])
+                              (get-in current-state [:query :where]))}
+          res (:body (<! (http/post "http://localhost:3000/query"
+                                    {:headers {"accept" "application/edn"}
+                                     :edn-params {:query query}})))]
+      (>! event-bus [:query/ran res]))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Main event loop
+
 (go-loop []
-  (let [event (<! event-bus)]
-    (println (pr-str event))
-    (swap! state assoc :loading? true)
+  (let [event (<! event-bus)
+        previous-state @state]
+    (.log js/console (pr-str "Event for " (first event)))
     (swap! state (partial controller event))
-    (swap! state assoc :loading? false)
+    (post-controller! event previous-state @state)
     (recur)))
 
-(om/root views/widget
-         state
-         {:target (.getElementById js/document "app")
-          :shared {:control event-bus}})
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Root OM component
+
+(defn main []
+  (om/root views/widget
+           state
+           {:target (.getElementById js/document "app")
+            :shared {:control event-bus}}))
+
+(main)
 
 (put! event-bus [:docs/fetch])
