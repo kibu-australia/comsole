@@ -25,16 +25,20 @@
                  [weasel "0.4.2"] ;; TODO: move to dev deps
                  [figwheel "0.1.3-SNAPSHOT"] ;; TODO: move to dev deps
                  [com.facebook/react "0.11.2"]
+                 [kibu/component-cljx "0.2.3-SNAPSHOT"]
                  [com.datomic/datomic-free "0.9.4815.10"]]
   :plugins [[lein-cljsbuild "1.0.3"]
             [lein-resource "0.3.1"]
+            [lein-ring "0.8.13"]
             [lein-figwheel "0.1.3-SNAPSHOT"]
             [com.keminglabs/cljx "0.4.0" :exclusions [org.clojure/clojure]]]
   :repl-options {:nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]}
   :figwheel {:http-server-root "public"}
-  :source-paths ["src"]
+  :source-paths ["src" "target/classes"]
   :target-path "target/"
   :uberjar-exclusions [#".*\.cljs"]
+  :ring {:init comsole.server/init-conn
+         :handler comsole.server/app}
   :cljx {:builds [{:source-paths ["src/comsole"]
                    :output-path "target/classes"
                    :rules :clj}

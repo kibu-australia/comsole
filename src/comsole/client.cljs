@@ -6,13 +6,68 @@
    [pushy.core :as pushy]
    [om-tools.core :refer-macros [defcomponentk]]
    [sablono.core :as html :refer-macros [html]]
-   [cljs.core.async :as async :refer [chan <! put!]]
+   [cljs.core.async :as async :refer [chan <! put! close!]]
    [cljs-http.client :as http]
    [comsole.views :as views]
-   [comsole.routes :as routes]))
+   [comsole.routes :as routes]
+   [com.stuartsierra.component :as component]))
+
+;; Architecture
+;;
+;;             
+;;  Event Bus   App State 
+;;  |      |       |
+;;  |      |       
+;; Router  +------------+
+;;  |      |            |
+;;  |     Cont A      Cont B 
+
 
 (enable-console-print!)
+
 (def event-bus (chan))
+
+(defrecord EventBus []
+  component/Lifecycle
+  (start [com]
+    (println "Starting EventBus...")
+    (assoc com :bus (chan)))
+  
+  (stop [com]
+    (println "Stopping EventBus...")
+    (close! (:bus com))
+    (assoc com :bus nil)))
+
+(defn new-event-bus [] (map->EventBus {}))
+
+;; The router depends on routes which is static (config) defined by bidi.
+;; It requires the event bus to communicate on.
+;; Internally our router will rely on Pushy.
+;; When it receives events it will publish these events to the event bus.
+(defrecord Router [routes event-bus]
+  component/Lifecycle
+  (start [com]
+    (println "Starting Router...")
+    (assoc com :routes routes))
+  
+  (stop [com]
+    (println "Stopping Router...")
+    (assoc com :router nil)))
+
+(defn new-router [] (map->Router {}))
+
+(defn new-system []
+  (-> (component/system-map
+       :event-bus (new-event-bus)
+       :router (new-router {:routes routes/routes}))
+      (component/system-using
+       {:router {:event-bus :event-bus}})))
+
+(def ^:dynamic system (new-system))
+
+;; We use set! instead of altar-var-root because cljs doesnt have vars
+(set! system (component/start (new-system)))
+(set! system (component/stop (new-system)))
 
 (defonce state
   (atom {:queries []
@@ -152,3 +207,4 @@
 (main)
 
 (put! event-bus [:docs/fetch])
+ 

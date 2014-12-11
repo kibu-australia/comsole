@@ -63,3 +63,6 @@
   (alter-var-root #'system component/start))
 
 (alter-var-root #'system component/start)
+
+
+(-main)
