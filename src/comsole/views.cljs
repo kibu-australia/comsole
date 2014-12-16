@@ -8,9 +8,8 @@
    [sablono.core :as html :refer-macros [html]]
    [cljs.core.async :as async :refer [chan <! put!]]
    [cljs-http.client :as http]
-   [comsole.util :as u]))
-
-(enable-console-print!)
+   [comsole.util :as u]
+   [comsole.event-bus :as event]))
 
 (defn bindings [query]
   (let [for-bindings   (filter symbol? (:find query))
@@ -45,11 +44,6 @@
                 [:li [:a {:href (str "/docs")} (name (first v))]])])])]]])))
 
 (defcomponentk docs [[:data docs :as app] [:shared control]]
-  (will-receive-props [_ _]
-    (println "docs received..."))
-
-  (did-update [_ _ _]
-    (println "docs updated..."))
   (render [_]
     (html
      [:div.col-xs-12
@@ -63,10 +57,6 @@
             [:p (str desc)]])])])))
 
 (defcomponentk results [[:data find data loading? :as app] [:shared control]]
-  (will-receive-props [_ _]
-    (println "results received..."))
-  (did-update [_ _ _]
-    (println "updated results"))
   (render [_]
    (html
     [:div
@@ -88,10 +78,6 @@
                [:td (pr-str d)])])]]]]]])))
 
 (defcomponentk navbar [[:data page :as app]]
-  (will-receive-props [s p]
-    (println "navbar received..." (pr-str p s)))
-  (did-update [_ _ _]
-    (println "updated navbar"))
   (render [_]
     (html
      [:div.navbar.navbar-inverse.navbar-fixed-top {:role "navigation"}
@@ -107,7 +93,7 @@
            [:li {:class (when (= page route) "active")}
             (u/link-for route)])]]]])))
 
-(defcomponentk where-row [[:data drop-down fields index where] [:shared control]]
+(defcomponentk where-row [[:data hover-binding drop-down fields index where] [:shared control]]
   (render [_]
     (html
      [:tr
@@ -115,10 +101,14 @@
         [:td
          (if-let [r (get where j)]
            [:div.input-blocks
-            [:span.binding.input-block (str r)
+            [:span.binding.input-block 
+             {:on-mouse-over  #(event/fire! control :binding/hover r)
+              :on-mouse-leave #(event/fire! control :binding/unhover nil)
+              :class (if (= r hover-binding) "hover")}
+             (str r)
              [:a
               [:span.glyphicon.glyphicon-remove
-               {:on-click #(put! control [:builder/edit-cell index j nil])}]]]]
+               {:on-click #(event/fire! control :builder/edit-cell {:row index :val j :new nil})}]]]]
 
            [:input.form-control
             {:placeholder (str "Please enter a " j)
@@ -129,11 +119,7 @@
             {:on-click #(put! control [:builder/del-row index])}
             [:span.glyphicon.glyphicon-remove]]]])))
 
-(defcomponentk builder [[:data data query docs loading? :as app] [:shared control]]
-  (will-receive-props [_ _]
-    (println "builder received..."))
-  (did-update [_ _ _]
-    (println "updated builder"))
+(defcomponentk builder [[:data data query docs loading? hover-binding :as app] [:shared control]]
   (render [_]
     (let [bindings  (bindings query)
           bindings (map (fn [x] [(symbol x) "Binding"])
@@ -146,18 +132,19 @@
          [:div.form-group
           [:label "Name"]
           [:input.form-control
-           {:value (:name query)
-            :on-change #(
-                         )}]]
+           {:value (:name query)}]]
          [:div.form-group
           [:label "Find"]
           [:div.input-container
            [:div.input-blocks
             (for [find (get-in query [:find])]
-              [:span.binding.input-block (str find)
+              [:span.binding.input-block 
+               {:on-mouse-over  #(event/fire! control :binding/hover find)
+                :on-mouse-leave #(event/fire! control :binding/unhover nil)
+                :class (if (= find hover-binding) "hover")} (str find)
                [:a
                 [:span.glyphicon.glyphicon-remove
-                 {:on-click #(put! control [:builder/find-remove find])}]]])]
+                 {:on-click #(event/fire! control :builder/find-remove find)}]]])]
            [:input.form-control
             {:on-key-down #(when (= 13 (.-which %))
                              (put! control [:builder/find-add (-> % .-target .-value)])
@@ -165,8 +152,7 @@
          [:div.form-group
           [:label "Inputs"]
           [:input.form-control
-           {:value (get-in query [:input])
-            :on-change #()}]]
+           {:value (get-in query [:input])}]]
          [:table.where
           [:thead
            [:tr
@@ -176,21 +162,19 @@
             [:th.control ""]]]
           [:tbody
            (for [[i m] (map-indexed vector (get-in query [:where]))]
-             (->where-row {:fields m :index i :drop-down drop-down :where m}))]]
+             (->where-row {:hover-binding hover-binding :fields m :index i :drop-down drop-down :where m}))]]
          [:div.pull-right
           [:a.btn.btn-success
            {:on-click #(put! control [:builder/add-row])}
            [:span.glyphicon.glyphicon-plus]]]]
-        [:a.btn.btn-primary {:on-click #(put! control [:query/run])}
+        [:a.btn.btn-primary {:on-click #(event/fire! control :query/run)}
          "Test"]
-        [:a.btn.btn-primary {:on-click #()}
+        [:a.btn.btn-primary
          "Save"]
         [:hr]
         (->results {:find (:find query) :data data :loading? loading?})]))))
 
 (defcomponentk queries [[:data queries :as app]]
-  (did-update [_ _ _]
-    (println "updated queries"))
   (render [_]
    (html
     [:div [:div.page-header [:h3 "Queries"]]
@@ -198,7 +182,7 @@
       (for [q queries]
         [:li (:name q)])]])))
 
-(defcomponentk widget [[:data page queries docs nav data query loading? :as app] [:shared control]]
+(defcomponentk widget [[:data hover-binding page queries docs nav data query loading? :as app] [:shared control]]
   (render [_]
     (html
      [:div
@@ -209,7 +193,7 @@
         (->sidebar {:docs docs :nav nav})
         [:div.col-xs-10.col-xs-offset-2.main
          (case page
-           :app/builder (->builder {:query query :docs docs :data data :loading? loading?})
+           :app/builder (->builder {:hover-binding hover-binding :query query :docs docs :data data :loading? loading?})
            :app/queries (->queries {:queries queries})
            :app/docs (->docs {:docs docs})
            [:div "404"])]]]])))

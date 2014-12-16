@@ -41,28 +41,20 @@
    :api/query query})
 
 (defn handler-lookup [deps handler-id]
-  (if (= "app" (namespace handler-id))
-    index
-    ((handler-id resources) deps)))
+  (case (namespace handler-id)
+    "app" index
+    "api" ((handler-id resources) deps)
+    nil))
 
 (defn handler [deps]
-  (-> (make-handler routes (partial handler-lookup deps))
+  (-> routes
+      (make-handler (partial handler-lookup deps))
       (wrap-resource "public")
-      (wrap-file-info)
-      (wrap-edn-params)
-      (prone/wrap-exceptions)))
+      (wrap-file-info)))
 
-(def system
+(defn system []
   (-> (component/system-map
        :db (components/new-datomic-db (:datomic-uri (read-config)))
        :server (components/new-web-server 3000 handler))
       (component/system-using
        {:server {:conn :db}})))
-
-(defn -main []
-  (alter-var-root #'system component/start))
-
-(alter-var-root #'system component/start)
-
-
-(-main)

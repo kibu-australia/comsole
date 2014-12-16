@@ -4,207 +4,103 @@
    [om.core :as om]
    [bidi.bidi :as bidi]
    [pushy.core :as pushy]
-   [om-tools.core :refer-macros [defcomponentk]]
-   [sablono.core :as html :refer-macros [html]]
-   [cljs.core.async :as async :refer [chan <! put! close!]]
-   [cljs-http.client :as http]
+   [cljs.core.async :as async :refer [<!]]
    [comsole.views :as views]
    [comsole.routes :as routes]
+   [comsole.controller :as cont]
+   [comsole.event-bus :as event]
    [com.stuartsierra.component :as component]))
-
-;; Architecture
-;;
-;;             
-;;  Event Bus   App State 
-;;  |      |       |
-;;  |      |       
-;; Router  +------------+
-;;  |      |            |
-;;  |     Cont A      Cont B 
-
 
 (enable-console-print!)
 
-(def event-bus (chan))
-
-(defrecord EventBus []
-  component/Lifecycle
-  (start [com]
-    (println "Starting EventBus...")
-    (assoc com :bus (chan)))
-  
-  (stop [com]
-    (println "Stopping EventBus...")
-    (close! (:bus com))
-    (assoc com :bus nil)))
-
-(defn new-event-bus [] (map->EventBus {}))
-
-;; The router depends on routes which is static (config) defined by bidi.
-;; It requires the event bus to communicate on.
-;; Internally our router will rely on Pushy.
-;; When it receives events it will publish these events to the event bus.
-(defrecord Router [routes event-bus]
+(defrecord Router [routes]
   component/Lifecycle
   (start [com]
     (println "Starting Router...")
-    (assoc com :routes routes))
+    (pushy/push-state! (partial event/fire! (:event-bus com) :route)
+                       (partial bidi/match-route routes)
+                       identity))
   
   (stop [com]
-    (println "Stopping Router...")
-    (assoc com :router nil)))
+    (println "Stopping Router...")))
 
-(defn new-router [] (map->Router {}))
+(defrecord State [config init]
+  component/Lifecycle
+  (start [com]
+    (println "Starting State...")
+    (assoc com :state (atom init)))
+  
+  (stop [com]
+    (println "Stopping State...")
+    (assoc com :state nil))
+  
+  ISwap 
+  (-swap! [com f]
+    (update-in com [:state] #(swap! % f))))
+
+(defrecord OmRoot [config widget]
+  component/Lifecycle
+  (start [com]
+    (println "Starting Om Root...")
+    (om/root widget
+             (:state (:state com))
+           {:target (.getElementById js/document "app")
+            :shared {:control (:event-bus com)}})
+    (assoc com :root :mounted))
+  
+  (stop [com]
+    (println "Stopping Om Root...")
+    (assoc com :root nil)))
+
+(defrecord Controller [config controller]
+  component/Lifecycle
+  (start [com]
+    (println "Starting Controller...")
+    (go-loop []
+      (let [event (<! (get-in com [:event-bus :bus]))]
+        (println (pr-str event))
+        (cont/post-controller! event event-bus state)
+        (swap! (:state com) (partial controller event))
+        (recur))))
+  
+  (stop [com]
+    (println "Stopping Controller...")))
+
+(defn new-router     [opts] (map->Router opts))
+(defn new-state      [opts] (map->State opts))
+(defn new-om-root    [opts] (map->OmRoot opts))
+(defn new-controller [opts] (map->Controller opts))
+
+(def init-state
+  {:queries []
+   :query {:find ['?type '(count ?ident) '?doc]
+           :where [{:entity '?x :attr :db/valueType :value '?t}
+                   {:entity '?x :attr :db/ident :value '?ident}
+                   {:entity '?t :attr :db/ident :value '?type}
+                   {:entity '?t :attr :db/doc :value '?doc}]}
+   :data []
+   :nav {}
+   :docs {}
+   :loading? false
+   :time-machine? false
+   :page :app/docs
+   :hover-binding nil})
 
 (defn new-system []
   (-> (component/system-map
-       :event-bus (new-event-bus)
-       :router (new-router {:routes routes/routes}))
+       :state      (new-state {:init init-state})
+       :event-bus  (event/new-event-bus)
+       :router     (new-router {:routes routes/routes})
+       :om-root    (new-om-root {:widget views/widget})
+       :controller (new-controller {:controller cont/controller}))
       (component/system-using
-       {:router {:event-bus :event-bus}})))
+       {:router     {:event-bus :event-bus}
+        :controller {:event-bus :event-bus
+                     :state     :state}
+        :om-root    {:state  :state
+                     :event-bus :event-bus}})))
 
 (def ^:dynamic system (new-system))
 
 ;; We use set! instead of altar-var-root because cljs doesnt have vars
-(set! system (component/start (new-system)))
-(set! system (component/stop (new-system)))
-
-(defonce state
-  (atom {:queries []
-         :query {:find ['?type '(count ?ident) '?doc]
-                 :where [{:entity '?x :attr :db/valueType :value '?t}
-                         {:entity '?x :attr :db/ident :value '?ident}
-                         {:entity '?t :attr :db/ident :value '?type}
-                         {:entity '?t :attr :db/doc :value '?doc}]}
-         :data []
-         :nav {}
-         :docs {}
-         :loading? false
-         :time-machine? false
-         :page :app/docs}))
-
-(defn dispatch [match]
-  (put! event-bus [:route match]))
-
-(pushy/push-state! dispatch
-                   (partial bidi/match-route routes/routes)
-                   identity)
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Event controller
-
-(defmulti controller
-  (fn [[event & opts] state] event))
-
-;; Act on route changes
-(defmethod controller :route
-  [[_ match] state]
-  (assoc state :page (:handler match)))
-
-;; Make a query
-(defmethod controller :query/run
-  [_ state]
-  (assoc state :loading? true))
-
-(defmethod controller :query/ran
-  [[_ data] state]
-  (assoc state :data data :loading? false))
-
-;; Fetch the docs
-(defmethod controller :docs/fetch
-  [_ state]
-  (assoc state :loading? true))
-
-(defmethod controller :docs/fetched
-  [[_ data] state]
-  (assoc state :docs data :loading? false))
-
-(defmethod controller :builder/add-row
-  [_ state]
-  (update-in state [:query :where] conj {:entity nil :attr nil :value nil}))
-
-(defmethod controller :builder/del-row
-  [[_ row] state]
-  (update-in state [:query :where]
-             (fn [x] (remove (fn [[i m]] (= row i))
-                            (map-indexed vector (get-in state [:query :where]))))))
-
-(defmethod controller :builder/edit-cell
-  [[_ i j v] state]
-  (assoc-in state [:query :where i j]
-            (if (nil? v) nil (cljs.reader/read-string v))))
-
-(defmethod controller :builder/find-add
-  [[_ find] state]
-  (update-in state [:query :find] conj
-             (cljs.reader/read-string find)))
-
-(defmethod controller :builder/find-remove
-  [[_ find] state]
-  (update-in state [:query :find]
-             (fn [x] (reduce (fn [c w] (if (not= w find)
-                                       (conj c w)
-                                       c))
-                            []
-                            x))))
-
-;; Expand/collapse the doc menu items
-(defmethod controller :nav/toggle
-  [[_ nav] state]
-  (update-in state [:nav nav] not))
-
-(defmethod controller :default
-  [[event & _] state]
-  (.log js/console (pr-str "No method found for event " event))
-  state)
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; Post controller: for side effects etc
-
-(defmulti post-controller!
-  (fn [[event & args] previous-state current-state] event))
-
-(defmethod post-controller! :default [_ _ _] nil)
-
-(defmethod post-controller! :docs/fetch [_ _ _]
-  (go
-    (let [docs (<! (http/get "http://localhost:3000/idents"
-                             {:headers {"accept" "application/edn"}}))]
-      (>! event-bus [:docs/fetched (:body docs)]))))
-
-(defmethod post-controller! :query/run [_ _ current-state]
-  (go
-    (let [query {:find (vec (get-in current-state [:query :find]))
-                 :where (mapv (fn [row] [(:entity row)
-                                        (:attr row)
-                                        (:value row)])
-                              (get-in current-state [:query :where]))}
-          res (:body (<! (http/post "http://localhost:3000/query"
-                                    {:headers {"accept" "application/edn"}
-                                     :edn-params {:query query}})))]
-      (>! event-bus [:query/ran res]))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; Main event loop
-
-(go-loop []
-  (let [event (<! event-bus)
-        previous-state @state]
-    (.log js/console (pr-str "Event for " (first event)))
-    (swap! state (partial controller event))
-    (post-controller! event previous-state @state)
-    (recur)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; Root OM component
-
-(defn main []
-  (om/root views/widget
-           state
-           {:target (.getElementById js/document "app")
-            :shared {:control event-bus}}))
-
-(main)
-
-(put! event-bus [:docs/fetch])
- 
+(set! system (component/start system))

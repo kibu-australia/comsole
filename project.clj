@@ -32,6 +32,9 @@
             [lein-ring "0.8.13"]
             [lein-figwheel "0.1.3-SNAPSHOT"]
             [com.keminglabs/cljx "0.4.0" :exclusions [org.clojure/clojure]]]
+  :profiles {:dev {:source-paths ["dev"]
+                   :dependencies [[org.clojure/tools.namespace "0.2.3"]
+                                  [org.clojure/java.classpath "0.2.0"]]}}
   :repl-options {:nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]}
   :figwheel {:http-server-root "public"}
   :source-paths ["src" "target/classes"]

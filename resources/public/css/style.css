@@ -6310,4 +6310,8 @@ table.where > tbody > tr > td > .form-control {
   border: none;
   box-shadow: none;
 }
+
+.hover {
+  background: #ccf;
+}
 /*# sourceMappingURL=style.css.map */

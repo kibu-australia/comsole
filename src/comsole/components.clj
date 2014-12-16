@@ -26,14 +26,14 @@
 (defrecord WebServer [port server handler]
   component/Lifecycle
   (start [component]
-    (println "Starting http-kit")
+    (println component)
     (let [server (run-server (handler component) {:port port})]
       (assoc component :server server)))
   (stop [component]
-    (println "Stopping http-kit")
-    (when server
+    (println "Stopping http-kit...")
+    (when (:server component)
       (server)
-      component)))
+      (dissoc component :server))))
 
 (defn new-web-server
   [port handler]
